@@ -12,12 +12,25 @@ import database
 
 logger = logging.getLogger(__name__)
 
+# Set environment variables for minimal CPU RAM footprint
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 # Initialize ChromaDB persistent client
 chroma_client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
 
-# Initialize SentenceTransformer embedding model locally (0 API calls required!)
-logger.info(f"Loading local embedding model: {config.EMBEDDING_MODEL_NAME}...")
-embedding_model = SentenceTransformer(config.EMBEDDING_MODEL_NAME)
+_embedding_model = None
+
+def get_embedding_model():
+    """Lazy loads SentenceTransformer embedding model to minimize RAM consumption."""
+    global _embedding_model
+    if _embedding_model is None:
+        logger.info(f"Loading local embedding model: {config.EMBEDDING_MODEL_NAME}...")
+        _embedding_model = SentenceTransformer(config.EMBEDDING_MODEL_NAME)
+    return _embedding_model
 
 # --- 1. FILE & IMAGE TEXT EXTRACTION ---
 
@@ -83,7 +96,7 @@ def _index_text_chunks(full_text: str, user_id: int, file_name: str) -> Tuple[bo
 
     collection = chroma_client.create_collection(name=collection_name)
 
-    embeddings = embedding_model.encode(chunks).tolist()
+    embeddings = get_embedding_model().encode(chunks).tolist()
     ids = [f"chunk_{i}" for i in range(len(chunks))]
     metadatas = [{"chunk_index": i, "source": file_name} for i in range(len(chunks))]
 
@@ -136,7 +149,7 @@ def process_pdf(pdf_path: str, user_id: int, file_name: str) -> Tuple[bool, str,
         collection = chroma_client.create_collection(name=collection_name)
 
         # Generate embeddings locally
-        embeddings = embedding_model.encode(chunks).tolist()
+        embeddings = get_embedding_model().encode(chunks).tolist()
         ids = [f"chunk_{i}" for i in range(len(chunks))]
         metadatas = [{"chunk_index": i, "source": file_name} for i in range(len(chunks))]
 
@@ -193,7 +206,7 @@ def search_relevant_chunks(user_id: int, query: str, top_k: int = 4) -> List[str
     collection_name = f"user_{user_id}"
     try:
         collection = chroma_client.get_collection(name=collection_name)
-        query_embedding = embedding_model.encode([query]).tolist()
+        query_embedding = get_embedding_model().encode([query]).tolist()
         results = collection.query(
             query_embeddings=query_embedding,
             n_results=min(top_k, collection.count())
