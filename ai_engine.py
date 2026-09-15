@@ -299,10 +299,12 @@ def generate_ai_response(prompt: str, context_chunks: Optional[List[str]] = None
 def _call_gemini_api(api_key: str, prompt: str) -> str:
     try:
         from google import genai
+        from google.genai import types
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
             model=config.DEFAULT_GEMINI_MODEL,
             contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.1)
         )
         return response.text
     except Exception as e:
@@ -315,6 +317,7 @@ def _call_groq_api(api_key: str, prompt: str) -> str:
         chat_completion = client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model=config.DEFAULT_GROQ_MODEL,
+            temperature=0.1
         )
         return chat_completion.choices[0].message.content
     except Exception as e:

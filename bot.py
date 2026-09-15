@@ -31,7 +31,7 @@ async def health_check_handler(request):
     )
 
 async def start_health_server(application):
-    """Starts async HTTP server on $PORT for Render health checks and CronJobs"""
+    """Starts async HTTP server on $PORT for Render health checks and pre-warms AI embedding model"""
     app = web.Application()
     app.router.add_get('/', health_check_handler)
     app.router.add_get('/health', health_check_handler)
@@ -43,6 +43,14 @@ async def start_health_server(application):
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logger.info(f"🌐 Health Check Web Server started on port {port} (Ready for Render & CronJob pings)")
+
+    # Pre-warm AI embedding model in background so first user upload takes only 1-2 seconds!
+    try:
+        logger.info("⚡ Pre-warming AI embedding model for instant 1-second file processing...")
+        ai_engine.get_embedding_model()
+        logger.info("✅ AI model pre-warmed successfully!")
+    except Exception as e:
+        logger.warning(f"Model pre-warm warning: {e}")
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Routes incoming text messages to admin inputs or user QA handlers"""
