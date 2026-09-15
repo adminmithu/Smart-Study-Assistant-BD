@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: smart-study-assistant-bot
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python bot.py"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: "8949634299:AAFYAILyoX0lJxtP92mgmXs8PWuZ6Ka4mZ4"
+      - key: ADMIN_IDS
+        value: "8929349073"
