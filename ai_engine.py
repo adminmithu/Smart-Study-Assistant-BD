@@ -19,8 +19,14 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
-# Initialize ChromaDB persistent client
-chroma_client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+_chroma_client = None
+
+def get_chroma_client():
+    global _chroma_client
+    if _chroma_client is None:
+        _chroma_client = chromadb.PersistentClient(path=config.CHROMA_PERSIST_DIR)
+    return _chroma_client
+
 
 _embedding_model = None
 
@@ -90,11 +96,11 @@ def _index_text_chunks(full_text: str, user_id: int, file_name: str) -> Tuple[bo
     collection_name = f"user_{user_id}"
 
     try:
-        chroma_client.delete_collection(name=collection_name)
+        get_chroma_client().delete_collection(name=collection_name)
     except Exception:
         pass
 
-    collection = chroma_client.create_collection(name=collection_name)
+    collection = get_chroma_client().create_collection(name=collection_name)
 
     embeddings = get_embedding_model().encode(chunks).tolist()
     ids = [f"chunk_{i}" for i in range(len(chunks))]
@@ -142,11 +148,11 @@ def process_pdf(pdf_path: str, user_id: int, file_name: str) -> Tuple[bool, str,
         
         # Reset existing collection for user if any
         try:
-            chroma_client.delete_collection(name=collection_name)
+            get_chroma_client().delete_collection(name=collection_name)
         except Exception:
             pass
 
-        collection = chroma_client.create_collection(name=collection_name)
+        collection = get_chroma_client().create_collection(name=collection_name)
 
         # Generate embeddings locally
         embeddings = get_embedding_model().encode(chunks).tolist()
@@ -189,7 +195,7 @@ def cleanup_inactive_memories(max_inactive_hours: int = 2):
         for uid in inactive_uids:
             col_name = f"user_{uid}"
             try:
-                chroma_client.delete_collection(name=col_name)
+                get_chroma_client().delete_collection(name=col_name)
             except Exception:
                 pass
             database.delete_user_document(uid)
@@ -205,7 +211,7 @@ def search_relevant_chunks(user_id: int, query: str, top_k: int = 4) -> List[str
 
     collection_name = f"user_{user_id}"
     try:
-        collection = chroma_client.get_collection(name=collection_name)
+        collection = get_chroma_client().get_collection(name=collection_name)
         query_embedding = get_embedding_model().encode([query]).tolist()
         results = collection.query(
             query_embeddings=query_embedding,
@@ -362,6 +368,8 @@ JSON ফরম্যাট উদাহরণ:
             return True, data, "✅ কুইজ প্রস্তুত!"
     except Exception as e:
         logger.error(f"Error parsing Quiz JSON: {e}, raw text: {raw_response}")
+
+    return False, [], "⚠️ কুইজের প্রশ্ন তৈরিতে সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।"
 
 def generate_written_suggestions_file(user_id: int) -> Tuple[bool, str, str]:
     chunks = search_relevant_chunks(user_id, "important questions answers key points concepts summary", top_k=6)
@@ -758,6 +766,12 @@ SSC ও HSC পরীক্ষার জন্য মানসম্মত Engli
     formats_text = generate_ai_response(prompt, context_chunks=chunks if chunks else None)
     doc_info = database.get_user_document(user_id)
     doc_title = doc_info["file_name"] if doc_info else "Study_Notes"
+
+    output_file_path = os.path.join(config.TEMP_PDF_DIR, f"Writing_Formats_{user_id}.txt")
+    header = f"=====================================================\n📜 {doc_title} - English Writing Rules & Formats\n=====================================================\n\n"
+    
+    with open(output_file_path, "w", encoding="utf-8") as f:
+        f.write(header + formats_text)
 
     return True, output_file_path, formats_text
 

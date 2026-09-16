@@ -15,6 +15,7 @@ import config
 import database
 import user_handlers
 import admin_handlers
+import ai_engine
 
 # Configure Logging
 logging.basicConfig(
@@ -31,7 +32,7 @@ async def health_check_handler(request):
     )
 
 async def start_health_server(application):
-    """Starts async HTTP server on $PORT for Render health checks and pre-warms AI embedding model"""
+    """Starts async HTTP server on $PORT for Render health checks"""
     app = web.Application()
     app.router.add_get('/', health_check_handler)
     app.router.add_get('/health', health_check_handler)
@@ -44,19 +45,24 @@ async def start_health_server(application):
     await site.start()
     logger.info(f"🌐 Health Check Web Server started on port {port} (Ready for Render & CronJob pings)")
 
-    # Pre-warm AI embedding model in background so first user upload takes only 1-2 seconds!
+    # Lazy pre-warm embedding model without blocking
     try:
-        logger.info("⚡ Pre-warming AI embedding model for instant 1-second file processing...")
+        logger.info("⚡ Attempting lazy pre-warm of AI embedding model...")
         ai_engine.get_embedding_model()
         logger.info("✅ AI model pre-warmed successfully!")
     except Exception as e:
-        logger.warning(f"Model pre-warm warning: {e}")
+        logger.warning(f"Model pre-warm warning (lazy load on first usage fallback): {e}")
 
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Routes incoming text messages to admin inputs or user QA handlers"""
-    handled_by_admin = await admin_handlers.handle_admin_text_input(update, context)
-    if not handled_by_admin:
-        await user_handlers.handle_text_question(update, context)
+    try:
+        handled_by_admin = await admin_handlers.handle_admin_text_input(update, context)
+        if not handled_by_admin:
+            await user_handlers.handle_text_question(update, context)
+    except Exception as e:
+        logger.error(f"Error in text_router: {e}", exc_info=True)
+        if update.effective_message:
+            await update.effective_message.reply_text("❌ একটি অনাকাঙ্ক্ষিত সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error("Exception while handling an update:", exc_info=context.error)

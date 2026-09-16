@@ -4,7 +4,7 @@ from typing import List, Dict, Optional, Tuple
 import config
 
 def get_connection():
-    conn = sqlite3.connect(config.DB_PATH)
+    conn = sqlite3.connect(config.DB_PATH, check_same_thread=False, timeout=30.0)
     conn.row_factory = sqlite3.Row
     return conn
 
