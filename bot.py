@@ -45,14 +45,6 @@ async def start_health_server(application):
     await site.start()
     logger.info(f"🌐 Health Check Web Server started on port {port} (Ready for Render & CronJob pings)")
 
-    # Lazy pre-warm embedding model without blocking
-    try:
-        logger.info("⚡ Attempting lazy pre-warm of AI embedding model...")
-        ai_engine.get_embedding_model()
-        logger.info("✅ AI model pre-warmed successfully!")
-    except Exception as e:
-        logger.warning(f"Model pre-warm warning (lazy load on first usage fallback): {e}")
-
 async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Routes incoming text messages to admin inputs or user QA handlers"""
     try:
